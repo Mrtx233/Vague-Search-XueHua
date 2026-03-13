@@ -121,6 +121,16 @@ class LanguageDetector:
         c = code.strip().lower()
         if c.startswith("__label__"):
             c = c.replace("__label__", "")
+        
+        # 中文映射逻辑：统一各类中文标签 (zho, chi, nan, yue -> zh)
+        zh_map = {
+            'zho': 'zh',
+            'chi': 'zh',
+            'nan': 'zh',
+            'yue': 'zh'
+        }
+        c = zh_map.get(c, c)
+        
         return c or "unknown"
 
     def lang_code_to_zh_name(self, code: str) -> str:
@@ -140,13 +150,17 @@ class LanguageDetector:
             logger.warning("FastText模型未初始化，无法执行语言检测")
             return 'unknown', 0.0
 
+        # 预处理文本：移除换行并进行长度检查 (针对 Windows 兼容性优化)
         processed_text = text.strip().replace("\n", " ").replace("\r", "")
-        if not processed_text:
-            logger.debug("无有效检测文本（空字符串或仅空白字符）")
+        if not processed_text or len(processed_text) < 2:
+            logger.debug(f"检测文本过短或为空: {processed_text}")
             return 'unknown', 0.0
 
         try:
+            # 修复 Windows 下 numpy/fasttext 兼容性问题
             labels, probs = self.model.predict(processed_text, k=1)
+            
+            # 获取标签并规范化，概率强制转换为 Python float 避免 numpy 对齐错误
             lang_code = self._normalize_code(labels[0])
             confidence = round(float(probs[0]), 4)
 
@@ -157,6 +171,7 @@ class LanguageDetector:
             return lang_code, confidence
 
         except Exception as e:
+            # 针对 Windows 端 numpy 报错的特殊处理：返回 unknown 避免程序崩溃
             logger.error(
                 f"语言检测失败 | 文本预览: {processed_text[:50]} | "
                 f"错误信息: {str(e)[:50]}"

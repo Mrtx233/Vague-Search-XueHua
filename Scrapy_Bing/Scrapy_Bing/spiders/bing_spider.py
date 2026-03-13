@@ -13,6 +13,7 @@ class BingSpider(scrapy.Spider):
     def __init__(self, keyword_path=None, *args, **kwargs):
         super(BingSpider, self).__init__(*args, **kwargs)
         self.keyword_path = keyword_path or r"E:\Crawler\模糊搜索\模糊搜索\json\output\泰语\IT_A.json"
+        self._kw_stats = {}
 
     @classmethod
     def from_crawler(cls, crawler, *args, **kwargs):
@@ -33,7 +34,10 @@ class BingSpider(scrapy.Spider):
     def mark_finished_bing(self, keyword):
         """对应原脚本: rds.sadd(f"{REDIS_PREFIX}:keyword_finished:bing", keyword)"""
         self.rds.sadd(f"{self.redis_prefix}:keyword_finished:bing", keyword)
-        self.logger.info(f"关键词已处理完成并标记: {keyword}")
+        s = self._kw_stats.get(keyword, {})
+        pages = s.get("pages", 0)
+        items = s.get("items", 0)
+        self.logger.info(f"关键词已处理完成并标记: {keyword} | pages={pages} | items={items}")
 
     def start_requests(self):
         keywords = self.load_keywords(self.keyword_path)
@@ -44,6 +48,8 @@ class BingSpider(scrapy.Spider):
 
             search_query = f'"{kw}" filetype:xlsx'
             url = f"https://www.bing.com/search?q={quote(search_query)}"
+            self._kw_stats.setdefault(kw, {"pages": 0, "items": 0})
+            self.logger.info(f"开始关键词: {kw} | page=1")
 
             yield scrapy.Request(
                 url,
@@ -52,11 +58,18 @@ class BingSpider(scrapy.Spider):
                     'keyword': kw,
                     'playwright': True,
                     'playwright_context': 'default',
+                    'page_no': 1,
                 }
             )
 
     async def parse(self, response):
         page = response.meta.get("playwright_page")
+        keyword = response.meta.get("keyword")
+        page_no = int(response.meta.get("page_no") or 1)
+        self._kw_stats.setdefault(keyword, {"pages": 0, "items": 0})
+        if page_no > self._kw_stats[keyword]["pages"]:
+            self._kw_stats[keyword]["pages"] = page_no
+        self.logger.info(f"解析关键词: {keyword} | page={page_no} | url={response.url}")
 
         if "我们的系统检测到您的计算机网络中存在异常流量" in response.text or "确认您不是机器人" in response.text:
             self.logger.error(f"⚠️ 拦截：关键词 '{response.meta['keyword']}' 触发验证码！")
@@ -77,17 +90,18 @@ class BingSpider(scrapy.Spider):
         results = response.xpath('//li[@class="b_algo"]')
 
         if not results:
-            self.logger.warning(f"关键词 '{response.meta['keyword']}' 未找到结果")
-            self.mark_finished_bing(response.meta['keyword'])
+            self.logger.warning(f"关键词 '{keyword}' 未找到结果 | page={page_no}")
+            self.mark_finished_bing(keyword)
             return
 
+        extracted = 0
         for res in results:
             item = BingFileItem()
 
             item['url'] = res.xpath('.//h2/a/@href').get()
             title_parts = res.xpath('.//h2/a//text()').getall()
             item['title'] = "".join(title_parts).strip()
-            item['keyword'] = response.meta['keyword']
+            item['keyword'] = keyword
 
             if not item['url']:
                 continue
@@ -101,13 +115,19 @@ class BingSpider(scrapy.Spider):
             except Exception:
                 item['website'] = "unknown"
 
+            extracted += 1
             yield item
+
+        self._kw_stats[keyword]["items"] += extracted
+        self.logger.info(f"完成页面: {keyword} | page={page_no} | extracted={extracted}")
 
         next_page = response.xpath('//a[@title="下一页"]/@href').get() or response.xpath('//a[@title="Next page"]/@href').get()
         if next_page:
-            yield response.follow(next_page, callback=self.parse, meta=response.meta)
+            meta = dict(response.meta)
+            meta["page_no"] = page_no + 1
+            yield response.follow(next_page, callback=self.parse, meta=meta)
         else:
-            self.mark_finished_bing(response.meta['keyword'])
+            self.mark_finished_bing(keyword)
 
     def load_keywords(self, path):
         """

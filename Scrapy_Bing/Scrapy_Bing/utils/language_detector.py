@@ -157,12 +157,14 @@ class LanguageDetector:
             return 'unknown', 0.0
 
         try:
-            # 修复 Windows 下 numpy/fasttext 兼容性问题
-            labels, probs = self.model.predict(processed_text, k=1)
+            # 针对 Windows 端 numpy 兼容性优化的终极方案
+            # 1. 强制使用 list 包装文本，触发 fasttext 的批量预测模式
+            # 2. 捕获特定的 numpy 内存对齐错误
+            labels, probs = self.model.predict([processed_text], k=1)
             
-            # 获取标签并规范化，概率强制转换为 Python float 避免 numpy 对齐错误
-            lang_code = self._normalize_code(labels[0])
-            confidence = round(float(probs[0]), 4)
+            # 批量模式返回的是列表的列表
+            lang_code = self._normalize_code(labels[0][0])
+            confidence = round(float(probs[0][0]), 4)
 
             logger.debug(
                 f"语言检测完成 | 文本预览: {processed_text[:50]} | "

@@ -41,11 +41,32 @@ class CustomGoogleFilesPipeline(FilesPipeline):
         if results:
             success, file_info = results[0]
             if success:
-                item['file_hash'] = file_info['checksum']
-                item['local_path'] = file_info['path']
+                md5 = file_info['checksum']
+                item['file_hash'] = md5
                 
-                spider = info.spider
-                spider.logger.info(f"文件下载成功: {item['local_path']}")
+                # 获取下载后的原始绝对路径
+                files_store = info.spider.settings.get('FILES_STORE')
+                old_rel_path = file_info['path']
+                old_abs_path = os.path.join(files_store, old_rel_path)
+                
+                # 构造目标绝对路径: {snowflake_id}/master/{MD5}.xlsx
+                snowflake_id = item.get('snowflake_id', 'unknown')
+                file_ext = item.get('file_type', 'xlsx')
+                new_rel_path = f"{snowflake_id}/master/{md5}.{file_ext}"
+                new_abs_path = os.path.join(files_store, new_rel_path)
+                
+                # 执行物理重命名 (Move)
+                try:
+                    if os.path.exists(old_abs_path):
+                        import shutil
+                        # 确保目标目录存在
+                        os.makedirs(os.path.dirname(new_abs_path), exist_ok=True)
+                        shutil.move(old_abs_path, new_abs_path)
+                        item['local_path'] = new_rel_path
+                        info.spider.logger.info(f"文件已重命名为 MD5: {new_rel_path}")
+                except Exception as e:
+                    info.spider.logger.error(f"文件重命名失败: {e}")
+                    
         return item
 
 # -------------------------- Pipeline 1: URL 去重 --------------------------

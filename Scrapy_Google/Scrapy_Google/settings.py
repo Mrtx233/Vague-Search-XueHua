@@ -12,9 +12,9 @@ USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTM
 # 2. 遵守 robots.txt (Google 爬取通常需要设为 False)
 ROBOTSTXT_OBEY = False
 
-# 3. 配置并发与延迟 (对应原脚本 MAX_WORKERS 和 time.sleep)
-CONCURRENT_REQUESTS = 8
-DOWNLOAD_DELAY = 2  # 基础延迟 2 秒
+# 3. 配置并发与延迟 (降低频率以模拟真人行为)
+CONCURRENT_REQUESTS = 1
+DOWNLOAD_DELAY = 5  # 基础延迟 5 秒
 RANDOMIZE_DOWNLOAD_DELAY = True # 随机延迟
 
 # 4. 启用 Item Pipelines (按顺序执行)

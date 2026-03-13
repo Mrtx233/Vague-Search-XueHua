@@ -12,7 +12,7 @@ class GoogleSpider(scrapy.Spider):
     
     # 初始化配置
     custom_settings = {
-        'PLAYWRIGHT_LAUNCH_OPTIONS': {'headless': True},
+        'PLAYWRIGHT_LAUNCH_OPTIONS': {'headless': False}, # 开启有界面模式，方便观察和处理验证码
     }
 
     def __init__(self, keyword_path=None, *args, **kwargs):

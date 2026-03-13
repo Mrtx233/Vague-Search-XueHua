@@ -17,13 +17,13 @@ class GoogleSpider(scrapy.Spider):
 
     def __init__(self, keyword_path=None, *args, **kwargs):
         super(GoogleSpider, self).__init__(*args, **kwargs)
-        self.keyword_path = keyword_path or r"E:\Crawler\模糊搜索\模糊搜索\json\output\阿拉伯语\互联网科技_A.json"
+        self.keyword_path = keyword_path or r"D:\code_Python\Vague-Search-XueHua\json\output\阿拉伯语\互联网科技_A.json"
         
         # 1. 在 Spider 初始化时建立 Redis 连接，用于关键词去重
         self.rds = redis.Redis(
             host='10.229.32.166',
             port=6379,
-            db=6,
+            db=2,
             decode_responses=True
         )
         self.redis_prefix = "crawler"

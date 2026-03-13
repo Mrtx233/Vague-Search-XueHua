@@ -24,7 +24,7 @@ class BingSpider(scrapy.Spider):
         self.rds = redis.Redis(
             host='10.229.32.166',
             port=6379,
-            db=6,
+            db=2,
             decode_responses=True
         )
         self.redis_prefix = "crawler"

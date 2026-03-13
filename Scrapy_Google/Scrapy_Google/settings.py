@@ -6,15 +6,15 @@ BOT_NAME = "Scrapy_Google"
 SPIDER_MODULES = ["Scrapy_Google.spiders"]
 NEWSPIDER_MODULE = "Scrapy_Google.spiders"
 
-# 1. 设置 User-Agent (对应原脚本 USER_AGENT)
-USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36'
+# 1. 设置 User-Agent (使用更真实的现代浏览器 UA)
+USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
 
-# 2. 遵守 robots.txt (Google 爬取通常需要设为 False)
+# 2. 遵守 robots.txt
 ROBOTSTXT_OBEY = False
 
-# 3. 配置并发与延迟 (降低频率以模拟真人行为)
+# 3. 配置并发与延迟 (模拟真人低频操作)
 CONCURRENT_REQUESTS = 1
-DOWNLOAD_DELAY = 5  # 基础延迟 5 秒
+DOWNLOAD_DELAY = 10  # 基础延迟 10 秒
 RANDOMIZE_DOWNLOAD_DELAY = True # 随机延迟
 
 # 4. 启用 Item Pipelines (按顺序执行)
@@ -50,7 +50,17 @@ DOWNLOAD_HANDLERS = {
 
 TWISTED_REACTOR = "twisted.internet.asyncioreactor.AsyncioSelectorReactor"
 
-# 7. 日志设置
+# 7. Playwright 隐身模式与回调配置
+# 需要安装: pip install playwright-stealth
+def run_stealth(page, request):
+    from playwright_stealth import stealth_sync
+    stealth_sync(page)
+
+PLAYWRIGHT_PROCESS_REQUEST_KWARGS = {
+    "page_init_callback": run_stealth,
+}
+
+# 8. 日志设置
 LOG_LEVEL = 'INFO'
 LOG_ENCODING = 'utf-8'
 

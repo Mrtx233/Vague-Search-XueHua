@@ -65,9 +65,30 @@ class GoogleSpider(scrapy.Spider):
 
     def parse(self, response):
         """
-        解析搜索结果页，提取文件链接和基本信息
+        解析搜索结果页，增加验证码检测逻辑
         """
-        # 对应原脚本中 parse_search_results 的解析逻辑
+        # 1. 检测是否触发了 Google 的验证码页面 (针对异常流量)
+        if "检测到您的计算机网络中存在异常流量" in response.text or response.css('form#captcha-form') or "確認您不是機器人" in response.text:
+            self.logger.error(f"严重警告：关键词 '{response.meta['keyword']}' 触发了人机验证！")
+            self.logger.error("请在弹出的浏览器窗口中手动完成点击验证...")
+            
+            # 在控制台阻塞，等待人工手动处理浏览器窗口
+            print("\n" + "="*60)
+            print(f"检测到验证码！关键词: {response.meta['keyword']}")
+            input("请在浏览器窗口完成验证后，回到此处按【回车键】继续采集...")
+            print("="*60 + "\n")
+            
+            # 验证完成后，重新发起对当前 URL 的请求
+            yield scrapy.Request(
+                response.url, 
+                callback=self.parse, 
+                meta=response.meta, 
+                dont_filter=True, 
+                priority=10 
+            )
+            return
+
+        # 2. 正常解析逻辑
         results = response.xpath('//div[@class="N54PNb BToiNc"]')
         
         if not results:

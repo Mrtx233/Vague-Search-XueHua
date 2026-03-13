@@ -45,6 +45,16 @@ DOWNLOAD_HANDLERS = {
 
 TWISTED_REACTOR = "twisted.internet.asyncioreactor.AsyncioSelectorReactor"
 
+# 8. Playwright 持久化上下文 (保持同一个浏览器窗口/配置文件)
+PLAYWRIGHT_CONTEXTS = {
+    "default": {
+        "user_data_dir": os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "pw_profile"),
+        "headless": False,
+    }
+}
+
+PLAYWRIGHT_MAX_PAGES_PER_CONTEXT = 1
+
 # 8. Playwright 隐身模式与回调配置
 def run_stealth(page, request):
     from playwright_stealth import stealth_sync

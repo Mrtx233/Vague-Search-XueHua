@@ -63,22 +63,24 @@ class GoogleSpider(scrapy.Spider):
                 }
             )
 
-    def parse(self, response):
+    async def parse(self, response):
         """
-        解析搜索结果页，增加验证码检测逻辑
+        解析搜索结果页，使用异步模式处理验证码
         """
-        # 1. 检测是否触发了 Google 的验证码页面 (针对异常流量)
+        page = response.meta.get("playwright_page")
+        
+        # 1. 检测是否触发了 Google 的验证码页面
         if "检测到您的计算机网络中存在异常流量" in response.text or response.css('form#captcha-form') or "確認您不是機器人" in response.text:
-            self.logger.error(f"严重警告：关键词 '{response.meta['keyword']}' 触发了人机验证！")
-            self.logger.error("请在弹出的浏览器窗口中手动完成点击验证...")
+            self.logger.error(f"⚠️ 拦截：关键词 '{response.meta['keyword']}' 触发验证码！")
             
-            # 在控制台阻塞，等待人工手动处理浏览器窗口
-            print("\n" + "="*60)
-            print(f"检测到验证码！关键词: {response.meta['keyword']}")
-            input("请在浏览器窗口完成验证后，回到此处按【回车键】继续采集...")
-            print("="*60 + "\n")
+            if page:
+                # 强行将浏览器窗口提到最前面
+                await page.bring_to_front()
+                # 停留 60 秒，给你足够的时间去手动点击
+                self.logger.info("浏览器已暂停，请在 60 秒内完成验证...")
+                await page.wait_for_timeout(60000) 
             
-            # 验证完成后，重新发起对当前 URL 的请求
+            # 验证完成后（或者 60 秒后），重新请求
             yield scrapy.Request(
                 response.url, 
                 callback=self.parse, 
@@ -88,7 +90,7 @@ class GoogleSpider(scrapy.Spider):
             )
             return
 
-        # 2. 正常解析逻辑
+        # 2. 正常解析逻辑 (此时 response.text 已经是验证通过后的内容)
         results = response.xpath('//div[@class="N54PNb BToiNc"]')
         
         if not results:

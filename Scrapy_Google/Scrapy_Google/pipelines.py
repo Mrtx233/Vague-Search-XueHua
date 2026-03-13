@@ -163,7 +163,7 @@ class RedisStoragePipeline:
         self.rds.rpush(result_key, json.dumps(result_json, ensure_ascii=False))
         
         spider.logger.info(f"成功保存结果到 Redis: {item['snowflake_id']} | {item['title'][:20]}")
-         return item
+        return item
 
 # -------------------------- Pipeline 4: MD5 级别去重 --------------------------
 class RedisMD5DeduplicatePipeline:

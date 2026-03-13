@@ -103,16 +103,16 @@ class GoogleSpider(scrapy.Spider):
 
     def load_keywords(self, path):
         """
-        从本地 JSON 文件加载关键词
+        从本地 JSON 文件加载关键词，并过滤掉空值
         """
         try:
-            # 这里的逻辑应适配你的文件结构
             if not os.path.exists(path):
                 self.logger.error(f"关键词文件不存在: {path}")
                 return []
             with open(path, 'r', encoding='utf-8-sig') as f:
                 data = json.load(f)
-                return [item['外文'] for item in data if '外文' in item]
+                # 过滤掉 None 或空字符串
+                return [item['外文'] for item in data if item.get('外文')]
         except Exception as e:
             self.logger.error(f"加载关键词异常: {e}")
             return []

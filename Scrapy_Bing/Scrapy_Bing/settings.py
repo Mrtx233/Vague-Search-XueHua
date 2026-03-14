@@ -29,7 +29,7 @@ ITEM_PIPELINES = {
 # 5. Redis 配置
 REDIS_HOST = "10.229.32.166"
 REDIS_PORT = 6379
-REDIS_DB = 6
+REDIS_DB = 2
 REDIS_PREFIX = "crawler"
 
 # 6. 语言检测与域名分类配置

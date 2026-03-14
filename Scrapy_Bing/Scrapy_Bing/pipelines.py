@@ -68,12 +68,12 @@ class RedisDeduplicatePipeline:
     """
     def open_spider(self, spider):
         self.rds = redis.Redis(
-            host=spider.settings.get('REDIS_HOST', '10.229.32.166'),
-            port=spider.settings.get('REDIS_PORT', 6379),
-            db=spider.settings.get('REDIS_DB', 6),
+            host=spider.settings['REDIS_HOST'],
+            port=spider.settings.getint('REDIS_PORT'),
+            db=spider.settings.getint('REDIS_DB'),
             decode_responses=True
         )
-        self.prefix = spider.settings.get('REDIS_PREFIX', 'crawler')
+        self.prefix = spider.settings['REDIS_PREFIX']
 
     def process_item(self, item, spider):
         seen_key = f"{self.prefix}:seen_url"
@@ -117,12 +117,12 @@ class RedisStoragePipeline:
     """
     def open_spider(self, spider):
         self.rds = redis.Redis(
-            host=spider.settings.get('REDIS_HOST', '10.229.32.166'),
-            port=spider.settings.get('REDIS_PORT', 6379),
-            db=spider.settings.get('REDIS_DB', 6),
+            host=spider.settings['REDIS_HOST'],
+            port=spider.settings.getint('REDIS_PORT'),
+            db=spider.settings.getint('REDIS_DB'),
             decode_responses=True
         )
-        self.prefix = spider.settings.get('REDIS_PREFIX', 'crawler')
+        self.prefix = spider.settings['REDIS_PREFIX']
 
     def process_item(self, item, spider):
         result_json = {
@@ -162,12 +162,12 @@ class RedisMD5DeduplicatePipeline:
     """
     def open_spider(self, spider):
         self.rds = redis.Redis(
-            host=spider.settings.get('REDIS_HOST', '10.229.32.166'),
-            port=spider.settings.get('REDIS_PORT', 6379),
-            db=spider.settings.get('REDIS_DB', 6),
+            host=spider.settings['REDIS_HOST'],
+            port=spider.settings.getint('REDIS_PORT'),
+            db=spider.settings.getint('REDIS_DB'),
             decode_responses=True
         )
-        self.prefix = spider.settings.get('REDIS_PREFIX', 'crawler')
+        self.prefix = spider.settings['REDIS_PREFIX']
 
     def process_item(self, item, spider):
         file_hash = item.get('file_hash')

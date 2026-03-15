@@ -23,32 +23,11 @@ THRESHOLD = 0.5  # 判定某语种的置信度阈值（>该值才判定为该语
 NUM_WORKERS = 4  # 默认线程数
 
 # 原有特殊目录
-ARABIC_DIR = "越南语文件"
-OTHER_DIR = "非目标语种文件"
 EMPTY_DIR = "无内容文件"
 ERROR_DIR = "处理失败文件"
 
 # 支持的文件后缀（移除 xlsb）
 SUPPORTED_SUFFIXES = {'xls', 'xlsx', 'xlsm', 'ett', 'et','xlsb'}
-
-# 用户要求的多语种映射（代码 -> 中文名）
-LANG_MAP = {
-    'de': '德语',
-    'en': '英语',
-    'es': '西班牙语',
-    'fr': '法语',
-    'hi': '印地语',
-    'id': '印度尼西亚语',
-    'it': '意大利语',
-    'ja': '日语',
-    'ko': '韩语',
-    'nl': '荷兰语',
-    'pt': '葡萄牙语',
-    'ru': '俄语',
-    'th': '泰语',
-    'vi': '越南语',
-    'zh': '中文'
-}
 
 
 # ---------------------------------------------------
@@ -107,42 +86,29 @@ def extract_text_by_format(file_path):
         return ""
 
 
-def detect_language(text, model, lang_map, threshold=THRESHOLD):
+def detect_language(text, model, threshold=THRESHOLD):
     """
     使用 fastText 模型检测语言。
     返回三个值：
-      detected_code: 如果检测到为目标语种或阿拉伯语返回对应代码，否则 None
-      prob: 如果 detected_code 不为 None，返回对应置信度；否则返回 top1 概率
-      top_code: top1 语言代码（始终返回）
+      detected_code: 检测到的语言代码
+      prob: 置信度
     检测逻辑：
-      - 先取 top k（k=5）候选，若候选中有 lang_map 中的代码且概率>threshold，直接返回该代码
-      - 否则若 top1 是 'ar' 且 top1_prob>threshold，则返回 'ar'（保留阿拉伯语分类）
-      - 否则返回 None，并给出 top1 信息
+      - 返回 top1 语言代码和对应置信度
     """
     text = text.strip().replace("\n", " ")
     if not text:
-        return None, 0.0, None
+        return None, 0.0
     if len(text) > 5000:
         text = text[:5000]
 
     try:
-        k = min(5, max(1, len(lang_map) + 2))
-        labels, probs = model.predict(text, k=k)
-        labels = [l.replace("__label__", "") for l in labels]
-        # 优先匹配目标 LANG_MAP
-        for code, prob in zip(labels, probs):
-            if code in lang_map and prob > threshold:
-                return code, prob, labels[0]
-        # 若 top1 为阿拉伯语并且置信度高，也返回 ar（保留原有阿拉伯识别）
-        if labels and labels[0] == 'ar' and probs[0] > threshold:
-            return 'ar', probs[0], labels[0]
-        # 未命中目标语种
-        top_code = labels[0] if labels else None
-        top_prob = probs[0] if probs else 0.0
-        return None, top_prob, top_code
+        labels, probs = model.predict(text, k=1)
+        lang_code = labels[0].replace("__label__", "") if labels else None
+        prob = probs[0] if probs else 0.0
+        return lang_code, prob
     except Exception as e:
         logger.error(f"语言检测失败: {str(e)}")
-        return None, 0.0, None
+        return None, 0.0
 
 
 def move_file_with_retry(src, dst, max_retries=3, delay=1):
@@ -183,23 +149,15 @@ def worker(task_queue, model, output_root):
                 target_dir = EMPTY_DIR
                 logger.info(f"检测到空内容：{filename} → {target_dir}")
             else:
-                detected_code, prob, top_code = detect_language(text, model, LANG_MAP, threshold=THRESHOLD)
-                if detected_code:
-                    # 若检测到的是我们需要的 LANG_MAP 中的语种
-                    if detected_code == 'vi':
-                        target_dir = ARABIC_DIR
-                        display_name = "越南语"
-                    else:
-                        display_name = LANG_MAP.get(detected_code, detected_code)
-                        target_dir = f"{display_name}"
-                    logger.info(f"检测结果：{filename} → {display_name}（代码：{detected_code}，置信度：{prob:.4f}）")
+                lang_code, prob = detect_language(text, model, threshold=THRESHOLD)
+                if lang_code:
+                    # 检测到语言，使用语言代码作为目录名
+                    target_dir = f"{lang_code}"
+                    logger.info(f"检测结果：{filename} → {lang_code}（置信度：{prob:.4f}）")
                 else:
-                    # 未匹配到目标语种且 top1 不是目标（或者置信度低）
-                    if top_code:
-                        logger.info(f"未匹配目标语种：{filename} top1={top_code} prob={prob:.4f}，归入 {OTHER_DIR}")
-                    else:
-                        logger.info(f"未能识别语言：{filename} 归入 {OTHER_DIR}")
-                    target_dir = OTHER_DIR
+                    # 未能识别语言
+                    target_dir = "未知语种"
+                    logger.info(f"未能识别语言：{filename} 归入 {target_dir}")
 
             # 3. 移动文件到对应目录（输出根目录下）
             full_target_dir = os.path.join(output_root, target_dir)
@@ -293,7 +251,6 @@ if __name__ == "__main__":
     NUM_WORKERS = 4
 
     print(f"===== 多语种Excel分类工具 =====")
-    print(f"识别目标语种：{', '.join([f'{v}({k})' for k, v in LANG_MAP.items()])}")
     print(f"支持格式：{SUPPORTED_SUFFIXES}")
     print(f"源目录：{SOURCE_DIRECTORY}")
     print(f"结果目录：{OUTPUT_ROOT}")
@@ -304,8 +261,6 @@ if __name__ == "__main__":
 
     print("\n===== 处理完成！=====")
     print(f"结果目录：{OUTPUT_ROOT}")
-    print(f"1. 每个目标语种会生成对应文件夹，例如：德语 (de)")
-    print(f"2. {ARABIC_DIR}：检测为阿拉伯语的文件")
-    print(f"3. {OTHER_DIR}：未命中目标列表或置信度不足的文件")
-    print(f"4. {EMPTY_DIR}：未提取到有效文本的文件")
-    print(f"5. {ERROR_DIR}：无法正常处理的文件")
+    print(f"1. 每个检测到的语种会生成对应文件夹（使用语言代码命名）")
+    print(f"2. {EMPTY_DIR}：未提取到有效文本的文件")
+    print(f"3. {ERROR_DIR}：无法正常处理的文件")

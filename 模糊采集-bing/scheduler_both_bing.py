@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # bing 脚本在 stdout 打印运行结果时使用的前缀
 RUN_RESULT_PREFIX = "RUN_RESULT_JSON:"
 # 默认 json 文件夹（可按需修改）
-DEFAULT_JSON_DIR = r"E:\Crawler\模糊搜索\模糊搜索\json\output\阿拉伯语"
+DEFAULT_JSON_DIR = r"D:\code_Python\Vague-Search-XueHua\json\output\印地语"
 
 
 def list_json_files(json_dir: Path) -> List[Path]:

@@ -1,11 +1,9 @@
 import time
-import random
 import os
 import hashlib
-import logging
+
 
 class SnowflakeIdGenerator:
-    """雪花ID生成器 - 生成11位纯数字ID"""
     def __init__(self, worker_id: int = 1):
         self.sequence = 0
         self.last_timestamp = -1
@@ -29,7 +27,7 @@ class SnowflakeIdGenerator:
             if self.sequence == 0:
                 timestamp = self._wait_next_millis(self.last_timestamp)
         elif timestamp < self.last_timestamp:
-            raise Exception("系统时间回退")
+            raise Exception("system clock moved backwards")
         else:
             self.sequence = 0
 
@@ -45,6 +43,7 @@ class SnowflakeIdGenerator:
 
         return snowflake_str
 
+
 def calculate_file_md5(file_path: str, chunk_size: int = 16384) -> str:
     md5_hash = hashlib.md5()
     try:
@@ -57,5 +56,5 @@ def calculate_file_md5(file_path: str, chunk_size: int = 16384) -> str:
                     break
                 md5_hash.update(chunk)
         return md5_hash.hexdigest()
-    except Exception as e:
+    except Exception:
         return ""

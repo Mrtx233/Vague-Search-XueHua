@@ -12,7 +12,7 @@ class BingSpider(scrapy.Spider):  # Bing 搜索爬虫（通过搜索结果提取
 
     def __init__(self, keyword_path=None, *args, **kwargs):  # 初始化 spider（支持命令行传入关键词路径）
         super(BingSpider, self).__init__(*args, **kwargs)  # 调用父类初始化
-        self.keyword_path = keyword_path or r"E:\Crawler\模糊搜索\模糊搜索\json\output\泰语\IT_A.json"  # 关键词 JSON 文件路径（未传参时使用默认）
+        self.keyword_path = keyword_path or r"D:\code_Python\Vague-Search-XueHua\json\output\泰语\人文地理.json"  # 关键词 JSON 文件路径（未传参时使用默认）
         self._kw_stats = {}  # 关键词统计：pages/items，用于日志与完成标记
         self._keyword_iter = None  # 关键词迭代器（用于严格串行切换关键词）
 
@@ -48,11 +48,15 @@ class BingSpider(scrapy.Spider):  # Bing 搜索爬虫（通过搜索结果提取
         return scrapy.Request(  # 生成请求对象交给调度器
             url,  # 搜索页 URL
             callback=self.parse,  # 回调解析函数（async）
-            meta={  # meta 用于在回调中传递上下文 + Playwright 控制参数
+            meta={  # meta 用于在回调中传递上下 + Playwright 控制参数
                 'keyword': kw,  # 当前关键词
                 'playwright': True,  # 启用 scrapy-playwright 下载器
                 'playwright_context': 'default',  # 复用默认浏览器上下文
                 'page_no': 1,  # 当前页码（用于统计与翻页）
+                'playwright_page_goto_kwargs': {
+                    'wait_until': 'networkidle',  # 等待网络空闲后再返回响应
+                    'timeout': 60000,             # 60秒超时
+                }
             }  # meta 结束
         )  # Request 结束
 
@@ -84,7 +88,36 @@ class BingSpider(scrapy.Spider):  # Bing 搜索爬虫（通过搜索结果提取
             self._kw_stats[keyword]["pages"] = page_no  # 更新已处理页数
         self.logger.info(f"解析关键词: {keyword} | page={page_no} | url={response.url}")  # 记录解析日志
 
+        # ========== 调试：打印响应内容（前500字符） ==========
+        response_preview = response.text[:500].replace('\n', ' ')
+        self.logger.info(f"【响应内容预览】{response_preview}")
+
         results = response.xpath('//li[@class="b_algo"]')  # 定位 Bing 搜索结果条目
+
+        # ========== 调试：打印所有 li 元素的 class ==========
+        all_li_classes = response.xpath('//li/@class').getall()
+        if page_no > 1:
+            self.logger.info(f"【第{page_no}页】所有 li 的 class: {all_li_classes[:10]}")  # 只打印前10个
+
+        # ========== 调试：检查是否有"无结果"提示 ==========
+        if page_no > 1 and not results:
+            no_results_text = response.xpath('//*[contains(text(), "没有找到") or contains(text(), "No results") or contains(text(), "Your search did not match")]/text()').getall()
+            if no_results_text:
+                self.logger.info(f"【第{page_no}页】检测到'无结果'提示: {no_results_text}")
+
+        # ========== 调试：尝试其他可能的选择器 ==========
+        if page_no > 1 and not results:
+            # 尝试其他可能的搜索结果选择器
+            selector_tests = [
+                ('//li[contains(@class, "algo")]', 'algo'),
+                ('//div[contains(@class, "b_result")]', 'b_result'),
+                ('//div[contains(@class, "b_algo")]', 'div_b_algo'),
+                ('//a[contains(@class, "title")]/ancestor::li', 'title_ancestor'),
+            ]
+            for selector, name in selector_tests:
+                test_results = response.xpath(selector)
+                if test_results:
+                    self.logger.info(f"【第{page_no}页页】选择器 {name} 匹配到 {len(test_results)} 个结果")
 
         if not results:  # 如果没有任何结果
             self.logger.warning(f"关键词 '{keyword}' 未找到结果 | page={page_no}")  # 记录无结果告警
@@ -142,7 +175,7 @@ class BingSpider(scrapy.Spider):  # Bing 搜索爬虫（通过搜索结果提取
                 return []  # 返回空关键词列表
             with open(path, 'r', encoding='utf-8-sig') as f:  # 以 utf-8-sig 兼容带 BOM 文件
                 data = json.load(f)  # 解析 JSON 为 Python 对象
-                return [item['外文'] for item in data if item.get('外文')]  # 取字段“外文”并过滤空值
+                return [item['中文'] for item in data if item.get('外文')]  # 取字段“外文”并过滤空值
         except Exception as e:  # 兜底异常处理
             self.logger.error(f"加载关键词异常: {e}")  # 输出异常原因
             return []  # 异常时返回空列表

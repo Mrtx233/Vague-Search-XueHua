@@ -1,141 +1,115 @@
-import scrapy
 import json
 import os
-import redis
-from urllib.parse import quote
-from Scrapy_Google.items import GoogleFileItem
 import re
+from urllib.parse import quote
+
+import redis
+import scrapy
+
+from Scrapy_Google.items import GoogleFileItem
+
 
 class GoogleSpider(scrapy.Spider):
     name = 'google_spider'
     allowed_domains = ['google.com']
-    
-    # 初始化配置
+
     custom_settings = {
-        'PLAYWRIGHT_LAUNCH_OPTIONS': {'headless': False}, # 开启有界面模式，方便观察和处理验证码
+        'PLAYWRIGHT_LAUNCH_OPTIONS': {'headless': False},
     }
 
     def __init__(self, keyword_path=None, *args, **kwargs):
         super(GoogleSpider, self).__init__(*args, **kwargs)
-        self.keyword_path = keyword_path or r"D:\code_Python\Vague-Search-XueHua\json\output\阿拉伯语\互联网科技_A.json"
-        
-        # 1. 在 Spider 初始化时建立 Redis 连接，用于关键词去重
-        self.rds = redis.Redis(
-            host='10.229.32.166',
-            port=6379,
-            db=2,
-            decode_responses=True
-        )
-        self.redis_prefix = "crawler"
+        self.keyword_path = keyword_path or r"D:\code_Python\Vague-Search-XueHua\json\output\印地语\IT_A.json"
+        self.rds = None
+        self.redis_prefix = None
+
+    def _init_redis(self):
+        if self.rds is None:
+            self.rds = redis.Redis(
+                host=self.settings.get('REDIS_HOST', '10.229.32.166'),
+                port=self.settings.get('REDIS_PORT', 6379),
+                db=2,
+                decode_responses=True
+            )
+            self.redis_prefix = self.settings.get('REDIS_PREFIX', 'crawler')
 
     def is_finished_google(self, keyword):
-        """对应原脚本: bool(rds.sismember(f"{REDIS_PREFIX}:keyword_finished:google", keyword))"""
         return self.rds.sismember(f"{self.redis_prefix}:keyword_finished:google", keyword)
 
     def mark_finished_google(self, keyword):
-        """对应原脚本: rds.sadd(f"{REDIS_PREFIX}:keyword_finished:google", keyword)"""
         self.rds.sadd(f"{self.redis_prefix}:keyword_finished:google", keyword)
-        self.logger.info(f"关键词已处理完成并标记: {keyword}")
+        self.logger.info(f"关键字已处理完成并标记 {keyword}")
 
     def start_requests(self):
-        """
-        1. 加载关键词列表
-        2. 检查 Redis，跳过已完成的关键词
-        3. 生成搜索请求
-        """
+        self._init_redis()
         keywords = self.load_keywords(self.keyword_path)
         for kw in keywords:
-            # 2. 关键词级别的去重逻辑
             if self.is_finished_google(kw):
                 self.logger.info(f"跳过已完成关键词: {kw}")
                 continue
-            
-            # 构造搜索指令
             search_query = f'"{kw}" filetype:xlsx'
             url = f"https://www.google.com/search?q={quote(search_query)}"
-            
             yield scrapy.Request(
-                url, 
-                callback=self.parse, 
+                url,
+                callback=self.parse,
                 meta={
                     'keyword': kw,
-                    'playwright': True 
+                    'playwright': True
                 }
             )
 
     async def parse(self, response):
-        """
-        解析搜索结果页，使用异步模式处理验证码
-        """
         page = response.meta.get("playwright_page")
-        
-        # 1. 检测是否触发了 Google 的验证码页面
-        if "检测到您的计算机网络中存在异常流量" in response.text or response.css('form#captcha-form') or "確認您不是機器人" in response.text:
-            self.logger.error(f"⚠️ 拦截：关键词 '{response.meta['keyword']}' 触发验证码！")
-            
+
+        if "检测到您的计算机网络中存在异常流量" in response.text or response.css('form#captcha-form') or "确认您不是机器人" in response.text:
+            self.logger.error(f"Captcha triggered for keyword '{response.meta['keyword']}'")
             if page:
-                # 强行将浏览器窗口提到最前面
                 await page.bring_to_front()
-                # 停留 60 秒，给你足够的时间去手动点击
-                self.logger.info("浏览器已暂停，请在 60 秒内完成验证...")
-                await page.wait_for_timeout(60000) 
-            
-            # 验证完成后（或者 60 秒后），重新请求
+                self.logger.info("等待人工处理验证码 60 秒")
+                await page.wait_for_timeout(60000)
             yield scrapy.Request(
-                response.url, 
-                callback=self.parse, 
-                meta=response.meta, 
-                dont_filter=True, 
-                priority=10 
+                response.url,
+                callback=self.parse,
+                meta=response.meta,
+                dont_filter=True,
+                priority=10
             )
             return
 
-        # 2. 正常解析逻辑 (此时 response.text 已经是验证通过后的内容)
         results = response.xpath('//div[@class="N54PNb BToiNc"]')
-        
         if not results:
-            self.logger.warning(f"关键词 '{response.meta['keyword']}' 未找到结果")
+            self.logger.warning(f"关键词'{response.meta['keyword']}'未找到结果")
             return
 
         for res in results:
             item = GoogleFileItem()
-            
-            # 提取 URL 和 标题
             item['url'] = res.xpath('.//div[@class="yuRUbf"]//a/@href').get()
             title_parts = res.xpath('.//h3//text()').getall()
             item['title'] = "".join(title_parts).strip()
             item['keyword'] = response.meta['keyword']
-            
-            # 提取文件类型 (从 URL 后缀提取)
+
             clean_url = item['url'].split('?')[0].split('#')[0]
             ext_match = re.search(r'\.([a-zA-Z0-9]{1,10})$', clean_url)
             item['file_type'] = ext_match.group(1).lower() if ext_match else "xlsx"
-            
-            # 提取来源网站 (Cite 标签内容)
+
             item['website'] = res.xpath('.//div[@class="byrV5b"]/cite/text()').get()
-            
+
             yield item
 
-        # 处理翻页逻辑 (寻找 'Next' 按钮)
         next_page = response.xpath('(//td[@class="d6cvqb BBwThe"])[2]/a/@href').get()
         if next_page:
             yield response.follow(next_page, callback=self.parse, meta=response.meta)
         else:
-            # 翻页结束，标记当前关键词已完成 (对应原脚本 mark_finished_google)
             self.mark_finished_google(response.meta['keyword'])
 
     def load_keywords(self, path):
-        """
-        从本地 JSON 文件加载关键词，并过滤掉空值
-        """
         try:
             if not os.path.exists(path):
-                self.logger.error(f"关键词文件不存在: {path}")
+                self.logger.error(f"关键字文件不存在: {path}")
                 return []
             with open(path, 'r', encoding='utf-8-sig') as f:
                 data = json.load(f)
-                # 过滤掉 None 或空字符串
                 return [item['外文'] for item in data if item.get('外文')]
         except Exception as e:
-            self.logger.error(f"加载关键词异常: {e}")
+            self.logger.error(f"加载关键字异常 {e}")
             return []
